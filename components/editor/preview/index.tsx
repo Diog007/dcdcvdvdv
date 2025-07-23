@@ -1,12 +1,14 @@
 "use client";
 import { useUpdateEffect } from "react-use";
-import React, { useMemo, useState, forwardRef } from "react";
+import React, { useState, forwardRef } from "react";
 import classNames from "classnames";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import { GridPattern } from "@/components/magic-ui/grid-pattern";
 import { SelectedElementToolbar } from "../ask-ai/SelectedElementToolbar";
+// NOVO: Importando o modal de edição de link
+import { LinkEditorModal } from "../ask-ai/LinkEditorModal";
 
 interface PreviewProps {
   html: string;
@@ -33,31 +35,35 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(
     },
     ref
   ) => {
-    const [selectedElement, setSelectedElement] = useState<HTMLElement | null>(
-      null
-    );
+    const [selectedElement, setSelectedElement] = useState<HTMLElement | null>(null);
     const iframeRef = React.useRef<HTMLIFrameElement | null>(null);
+    
+    // NOVO: Estados para controlar o modal de link
+    const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+    const [currentUrlToEdit, setCurrentUrlToEdit] = useState("");
+
+    const updateFullHtml = () => {
+      const fullHtml = iframeRef.current?.contentDocument?.documentElement.outerHTML;
+      if (fullHtml) {
+        setHtml(fullHtml);
+        toast.success("Element updated!");
+      }
+    };
 
     const makeElementEditable = (element: HTMLElement) => {
       element.setAttribute("contentEditable", "true");
       element.focus();
       element.classList.add("editing-element");
 
-      const handleBlur = () => {
-        finishEditing(element);
-      };
-
+      const handleBlur = () => finishEditing(element);
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           finishEditing(element);
         }
         if (e.key === "Escape") {
-          // Restore original content on Escape
           const originalContent = element.getAttribute("data-original-html");
-          if (originalContent) {
-            element.innerHTML = originalContent;
-          }
+          if (originalContent) element.innerHTML = originalContent;
           finishEditing(element);
         }
       };
@@ -69,19 +75,42 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(
     const finishEditing = (element: HTMLElement) => {
       element.removeAttribute("contentEditable");
       element.classList.remove("editing-element");
-
       const originalHtml = element.getAttribute("data-original-html");
-      const newHtml = element.innerHTML;
-
-      if (originalHtml !== newHtml) {
-        // Update the main HTML state
-        const fullHtml = iframeRef.current?.contentDocument?.documentElement.outerHTML;
-        if (fullHtml) {
-          setHtml(fullHtml);
-          toast.success("Element updated!");
-        }
+      if (originalHtml !== element.innerHTML) {
+        updateFullHtml();
       }
       element.removeAttribute("data-original-html");
+    };
+
+    // ALTERADO: A função agora abre o modal em vez de usar prompt()
+    const handleLink = () => {
+      if (!selectedElement) return;
+      const tagName = selectedElement.tagName.toLowerCase();
+      let currentUrl = "";
+
+      if (tagName === "a") {
+        currentUrl = selectedElement.getAttribute("href") || "";
+      } else if (tagName === "button") {
+        const onclick = selectedElement.getAttribute("onclick");
+        if (onclick && onclick.includes("window.location.href")) {
+          currentUrl = onclick.match(/'([^']+)'/)?.[1] || "";
+        }
+      }
+      setCurrentUrlToEdit(currentUrl);
+      setIsLinkModalOpen(true);
+    };
+
+    // NOVO: Função para salvar o link do modal
+    const handleSaveLink = (newUrl: string) => {
+      if (!selectedElement) return;
+      const tagName = selectedElement.tagName.toLowerCase();
+      if (tagName === "a") {
+        selectedElement.setAttribute("href", newUrl);
+      } else if (tagName === "button") {
+        selectedElement.setAttribute("onclick", `window.location.href='${newUrl}'`);
+      }
+      updateFullHtml();
+      setSelectedElement(null);
     };
 
     const handleElementClick = (e: MouseEvent) => {
@@ -97,9 +126,7 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(
     useUpdateEffect(() => {
       const iframeDoc = iframeRef.current?.contentDocument;
       if (iframeDoc) {
-        // Clear previous listeners
         iframeDoc.removeEventListener("click", handleElementClick);
-
         if (isEditableModeEnabled) {
           iframeDoc.addEventListener("click", handleElementClick);
           iframeDoc.body.style.cursor = "pointer";
@@ -108,13 +135,10 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(
           setSelectedElement(null);
         }
       }
-
       return () => {
-        if (iframeDoc) {
-          iframeDoc.removeEventListener("click", handleElementClick);
-        }
+        if (iframeDoc) iframeDoc.removeEventListener("click", handleElementClick);
       };
-    }, [isEditableModeEnabled, html]); // Re-attach listeners when mode or html changes
+    }, [isEditableModeEnabled, html]);
 
     return (
       <div
@@ -127,34 +151,26 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(
             "max-lg:h-full": currentTab === "preview",
           }
         )}
-        onClick={(e) => {
-          if (isAiWorking) {
-            e.preventDefault();
-            e.stopPropagation();
-            toast.warning("Please wait for the AI to finish working.");
-          }
+        onClick={() => {
+          if (isAiWorking) toast.warning("Please wait for the AI to finish working.");
         }}
       >
         <GridPattern
           x={-1}
           y={-1}
           strokeDasharray={"4 2"}
-          className={cn(
-            "[mask-image:radial-gradient(900px_circle_at_center,white,transparent)]"
-          )}
+          className={cn("[mask-image:radial-gradient(900px_circle_at_center,white,transparent)]")}
         />
         {isEditableModeEnabled && selectedElement && (
           <SelectedElementToolbar
             element={selectedElement}
             onDelete={() => setSelectedElement(null)}
             onEdit={() => {
-              selectedElement.setAttribute(
-                "data-original-html",
-                selectedElement.innerHTML
-              );
+              selectedElement.setAttribute("data-original-html", selectedElement.innerHTML);
               makeElementEditable(selectedElement);
-              setSelectedElement(null); // Hide toolbar while editing
+              setSelectedElement(null);
             }}
+            onLink={handleLink}
           />
         )}
         <iframe
@@ -181,6 +197,13 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(
               });
             }
           }}
+        />
+        {/* NOVO: Renderiza o modal de edição de link */}
+        <LinkEditorModal
+          open={isLinkModalOpen}
+          onOpenChange={setIsLinkModalOpen}
+          currentUrl={currentUrlToEdit}
+          onSave={handleSaveLink}
         />
       </div>
     );
