@@ -37,9 +37,9 @@ export const AppEditor = ({ project }: { project?: Project | null }) => {
   const deploy = searchParams.get("deploy") === "true";
 
   const previewRef = useRef<HTMLDivElement | null>(null);
-  const editorContainerRef = useRef<HTMLDivElement>(null);
+  const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
-  const resizerRef = useRef<HTMLDivElement>(null);
+  const resizerRef = useRef<HTMLDivElement | null>(null);
   const monacoRef = useRef<any>(null);
 
   const [currentTab, setCurrentTab] = useState("chat");
@@ -47,6 +47,8 @@ export const AppEditor = ({ project }: { project?: Project | null }) => {
   const [isResizing, setIsResizing] = useState(false);
   const [isAiWorking, setIsAiWorking] = useState(false);
   const [isEditableModeEnabled, setIsEditableModeEnabled] = useState(false);
+  // NOVO: Estado para o modo de seleção da IA
+  const [isAiSelectionModeEnabled, setIsAiSelectionModeEnabled] = useState(false);
   const [selectedElement, setSelectedElement] = useState<HTMLElement | null>(
     null
   );
@@ -223,6 +225,8 @@ export const AppEditor = ({ project }: { project?: Project | null }) => {
                 }
                 isEditableModeEnabled={isEditableModeEnabled}
                 setIsEditableModeEnabled={setIsEditableModeEnabled}
+                isAiSelectionModeEnabled={isAiSelectionModeEnabled} // NOVO
+                setIsAiSelectionModeEnabled={setIsAiSelectionModeEnabled} // NOVO
                 selectedElement={selectedElement}
                 setSelectedElement={setSelectedElement}
               />
@@ -242,10 +246,10 @@ export const AppEditor = ({ project }: { project?: Project | null }) => {
           device={device}
           currentTab={currentTab}
           isEditableModeEnabled={isEditableModeEnabled}
+          isAiSelectionModeEnabled={isAiSelectionModeEnabled} // NOVO
           onElementSelect={(element) => {
             setSelectedElement(element);
-            // Switch back to chat view on selection for AI context
-            if (window.innerWidth <= 1024) {
+            if (isAiSelectionModeEnabled && window.innerWidth <= 1024) {
               setCurrentTab("chat");
             }
           }}

@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { GridPattern } from "@/components/magic-ui/grid-pattern";
 import { SelectedElementToolbar } from "../ask-ai/SelectedElementToolbar";
-// NOVO: Importando o modal de edição de link
 import { LinkEditorModal } from "../ask-ai/LinkEditorModal";
 
 interface PreviewProps {
@@ -18,6 +17,7 @@ interface PreviewProps {
   device: "desktop" | "mobile";
   currentTab: string;
   isEditableModeEnabled?: boolean;
+  isAiSelectionModeEnabled?: boolean;
   onElementSelect: (element: HTMLElement) => void;
 }
 
@@ -31,14 +31,13 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(
       device,
       currentTab,
       isEditableModeEnabled,
+      isAiSelectionModeEnabled,
       onElementSelect,
     },
     ref
   ) => {
     const [selectedElement, setSelectedElement] = useState<HTMLElement | null>(null);
     const iframeRef = React.useRef<HTMLIFrameElement | null>(null);
-    
-    // NOVO: Estados para controlar o modal de link
     const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
     const [currentUrlToEdit, setCurrentUrlToEdit] = useState("");
 
@@ -51,6 +50,20 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(
     };
 
     const makeElementEditable = (element: HTMLElement) => {
+      const tagName = element.tagName.toLowerCase();
+
+      // Lógica específica para botões
+      if (tagName === 'button') {
+        const newText = prompt("Enter the new button text:", element.innerText);
+        if (newText !== null && newText !== element.innerText) {
+          element.innerText = newText;
+          updateFullHtml();
+        }
+        setSelectedElement(null); // Deseleciona após a edição
+        return;
+      }
+
+      // Lógica padrão para outros elementos de texto
       element.setAttribute("contentEditable", "true");
       element.focus();
       element.classList.add("editing-element");
@@ -82,7 +95,6 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(
       element.removeAttribute("data-original-html");
     };
 
-    // ALTERADO: A função agora abre o modal em vez de usar prompt()
     const handleLink = () => {
       if (!selectedElement) return;
       const tagName = selectedElement.tagName.toLowerCase();
@@ -100,7 +112,6 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(
       setIsLinkModalOpen(true);
     };
 
-    // NOVO: Função para salvar o link do modal
     const handleSaveLink = (newUrl: string) => {
       if (!selectedElement) return;
       const tagName = selectedElement.tagName.toLowerCase();
@@ -114,31 +125,48 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(
     };
 
     const handleElementClick = (e: MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
       const target = e.target as HTMLElement;
       if (target && target.tagName !== "BODY" && target.tagName !== "HTML") {
-        setSelectedElement(target);
+        if (isEditableModeEnabled) {
+          setSelectedElement(target);
+        }
         onElementSelect(target);
       }
     };
 
     useUpdateEffect(() => {
       const iframeDoc = iframeRef.current?.contentDocument;
-      if (iframeDoc) {
-        iframeDoc.removeEventListener("click", handleElementClick);
-        if (isEditableModeEnabled) {
-          iframeDoc.addEventListener("click", handleElementClick);
-          iframeDoc.body.style.cursor = "pointer";
-        } else {
-          iframeDoc.body.style.cursor = "default";
-          setSelectedElement(null);
+      if (!iframeDoc) return;
+
+      const styleElementId = 'deepsite-edit-mode-style';
+      let styleElement = iframeDoc.getElementById(styleElementId);
+      
+      const isAnyEditModeActive = isEditableModeEnabled || isAiSelectionModeEnabled;
+
+      if (isAnyEditModeActive) {
+        if (!styleElement) {
+          styleElement = iframeDoc.createElement('style');
+          styleElement.id = styleElementId;
+          iframeDoc.head.appendChild(styleElement);
         }
+        // Desativa cliques em links e botões para permitir a seleção
+        styleElement.innerHTML = `a, button { pointer-events: none !important; }`;
+        iframeDoc.body.style.cursor = "pointer";
+        iframeDoc.addEventListener("click", handleElementClick);
+
+      } else {
+        if (styleElement) {
+          styleElement.remove();
+        }
+        iframeDoc.body.style.cursor = "default";
+        iframeDoc.removeEventListener("click", handleElementClick);
+        setSelectedElement(null);
       }
+
       return () => {
-        if (iframeDoc) iframeDoc.removeEventListener("click", handleElementClick);
+        iframeDoc.removeEventListener("click", handleElementClick);
       };
-    }, [isEditableModeEnabled, html]);
+    }, [isEditableModeEnabled, isAiSelectionModeEnabled, html]);
 
     return (
       <div
@@ -151,9 +179,6 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(
             "max-lg:h-full": currentTab === "preview",
           }
         )}
-        onClick={() => {
-          if (isAiWorking) toast.warning("Please wait for the AI to finish working.");
-        }}
       >
         <GridPattern
           x={-1}
@@ -168,7 +193,6 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(
             onEdit={() => {
               selectedElement.setAttribute("data-original-html", selectedElement.innerHTML);
               makeElementEditable(selectedElement);
-              setSelectedElement(null);
             }}
             onLink={handleLink}
           />
@@ -180,6 +204,8 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(
           className={classNames(
             "w-full select-none transition-all duration-200 bg-white h-full",
             {
+              // Iframe é totalmente interativo apenas quando nenhum modo de edição está ativo
+              "pointer-events-auto": !isEditableModeEnabled && !isAiSelectionModeEnabled,
               "pointer-events-none": isResizing || isAiWorking,
               "lg:max-w-md lg:mx-auto lg:!rounded-[42px] lg:border-[8px] lg:border-neutral-700 lg:shadow-2xl lg:h-[80dvh] lg:max-h-[996px]":
                 device === "mobile",
@@ -198,7 +224,6 @@ export const Preview = forwardRef<HTMLDivElement, PreviewProps>(
             }
           }}
         />
-        {/* NOVO: Renderiza o modal de edição de link */}
         <LinkEditorModal
           open={isLinkModalOpen}
           onOpenChange={setIsLinkModalOpen}

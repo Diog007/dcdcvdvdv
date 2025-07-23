@@ -4,7 +4,7 @@ import { useState, useRef, useMemo } from "react";
 import classNames from "classnames";
 import { toast } from "sonner";
 import { useLocalStorage, useUpdateEffect } from "react-use";
-import { ArrowUp, ChevronDown, Crosshair } from "lucide-react";
+import { ArrowUp, ChevronDown, Crosshair, Wand2 } from "lucide-react";
 import { FaStopCircle } from "react-icons/fa";
 
 import ProModal from "@/components/pro-modal";
@@ -30,6 +30,8 @@ export function AskAI({
   isAiWorking,
   setisAiWorking,
   isEditableModeEnabled = false,
+  isAiSelectionModeEnabled = false,
+  setIsAiSelectionModeEnabled,
   selectedElement,
   setSelectedElement,
   setIsEditableModeEnabled,
@@ -46,6 +48,8 @@ export function AskAI({
   onSuccess: (h: string, p: string, n?: number[][]) => void;
   isEditableModeEnabled: boolean;
   setIsEditableModeEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  isAiSelectionModeEnabled: boolean;
+  setIsAiSelectionModeEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   selectedElement?: HTMLElement | null;
   setSelectedElement: React.Dispatch<React.SetStateAction<HTMLElement | null>>;
 }) {
@@ -187,7 +191,6 @@ export function AskAI({
               }
               if (audio.current) audio.current.play();
 
-              // Now we have the complete HTML including </html>, so set it to be sure
               const finalDoc = contentResponse.match(
                 /<!DOCTYPE html>[\s\S]*<\/html>/
               )?.[0];
@@ -237,7 +240,6 @@ export function AskAI({
                 partialDoc += "\n</html>";
               }
 
-              // Throttle the re-renders to avoid flashing/flicker
               const now = Date.now();
               if (now - lastRenderTime > 300) {
                 setHtml(partialDoc);
@@ -368,9 +370,9 @@ export function AskAI({
             )}
             placeholder={
               selectedElement
-                ? `Ask DeepSite about ${selectedElement.tagName.toLowerCase()}...`
+                ? `Ask AI to edit the selected ${selectedElement.tagName.toLowerCase()} element...`
                 : hasAsked
-                ? "Ask DeepSite for edits"
+                ? "Ask AI for more edits..."
                 : "Ask DeepSite anything..."
             }
             value={prompt}
@@ -386,31 +388,60 @@ export function AskAI({
           <div className="flex-1 flex items-center justify-start gap-1.5">
             <ReImagine onRedesign={(md) => callAi(md)} />
             {!isSameHtml && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="xs"
-                    variant={isEditableModeEnabled ? "default" : "outline"}
-                    onClick={() => {
-                      setIsEditableModeEnabled?.(!isEditableModeEnabled);
-                    }}
-                    className={classNames("h-[28px]", {
-                      "!text-neutral-400 hover:!text-neutral-200 !border-neutral-600 !hover:!border-neutral-500":
-                        !isEditableModeEnabled,
-                    })}
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="xs"
+                      variant={isEditableModeEnabled ? "default" : "outline"}
+                      onClick={() => {
+                        setIsEditableModeEnabled(!isEditableModeEnabled);
+                        if (isAiSelectionModeEnabled) setIsAiSelectionModeEnabled(false);
+                        if (isEditableModeEnabled) setSelectedElement(null);
+                      }}
+                      className={classNames("h-[28px]", {
+                        "!text-neutral-400 hover:!text-neutral-200 !border-neutral-600 !hover:!border-neutral-500":
+                          !isEditableModeEnabled,
+                      })}
+                    >
+                      <Crosshair className="size-4" />
+                      Visual Edit
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    align="start"
+                    className="bg-neutral-950 text-xs text-neutral-200 py-1 px-2 rounded-md -translate-y-0.5"
                   >
-                    <Crosshair className="size-4" />
-                    Edit
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent
-                  align="start"
-                  className="bg-neutral-950 text-xs text-neutral-200 py-1 px-2 rounded-md -translate-y-0.5"
-                >
-                  Select an element on the page to ask DeepSite edit it
-                  directly.
-                </TooltipContent>
-              </Tooltip>
+                    Click to visually edit text and links directly on the page.
+                  </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="xs"
+                      variant={isAiSelectionModeEnabled ? "default" : "outline"}
+                      onClick={() => {
+                        setIsAiSelectionModeEnabled(!isAiSelectionModeEnabled);
+                        if (isEditableModeEnabled) setIsEditableModeEnabled(false);
+                        if (isAiSelectionModeEnabled) setSelectedElement(null);
+                      }}
+                      className={classNames("h-[28px]", {
+                        "!text-neutral-400 hover:!text-neutral-200 !border-neutral-600 !hover:!border-neutral-500":
+                          !isAiSelectionModeEnabled,
+                      })}
+                    >
+                      <Wand2 className="size-4" />
+                      Select for AI
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    align="start"
+                    className="bg-neutral-950 text-xs text-neutral-200 py-1 px-2 rounded-md -translate-y-0.5"
+                  >
+                    Select an element to target it with an AI prompt in the chat.
+                  </TooltipContent>
+                </Tooltip>
+              </>
             )}
             <InviteFriends />
           </div>
@@ -456,7 +487,7 @@ export function AskAI({
                   setIsFollowUp(e === true);
                 }}
               />
-              Diff-Patch Update
+              AI Follow-up
             </label>
             <FollowUpTooltip />
           </div>
