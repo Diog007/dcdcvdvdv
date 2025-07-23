@@ -43,6 +43,16 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* Adicione estas classes ao final do seu arquivo globals.css */
+
+.editing-element {
+  outline: 2px dashed #38bdf8 !important; /* sky-500 */
+  outline-offset: 2px;
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+  cursor: text !important;
+  border-radius: 4px;
+}
+
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);
